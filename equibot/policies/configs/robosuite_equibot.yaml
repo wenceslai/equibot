@@ -1,0 +1,9 @@
+defaults:
+  - robosuite_dp
+
+agent:
+  agent_name: equibot
+
+model:
+  encoder:
+    backbone_type: vn_pointnet

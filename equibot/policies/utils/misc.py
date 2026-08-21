@@ -41,6 +41,9 @@ def get_env_class(env_name):
     elif env_name == "close":
         from equibot.envs.sim_mobile.closing_env import ClosingEnv
         return ClosingEnv
+    elif env_name == "robosuite":
+        from equibot.envs.robosuite_sim.env import RobosuiteEnv
+        return RobosuiteEnv
     else:
         raise ValueError()
 

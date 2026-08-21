@@ -1,0 +1,41 @@
+# Diffusion Policy (point-cloud) baseline on a robosuite / MimicGen task.
+# Required overrides: env.args.dataset_path (demo HDF5, absolute path),
+# env.args.task_name (key of tasks.TASK_SPECS), data.dataset.path (<out>/pcs).
+defaults:
+  - base
+
+env:
+  env_class: robosuite
+  num_eef: 1
+  dof: 7
+  eef_dim: 13
+  vectorize: false        # RobosuiteEnv is single-process only
+  args:
+    dataset_path: ???
+    task_name: ???
+    resolution: 256
+    camera: agentview
+    max_episode_length: 600   # = eval_closed_loop.py --max_steps
+    init_states: random       # random (env placement sampler, seeded per episode) | demo (HDF5 layouts, in demo order)
+    max_points: 4096
+    video_resolution: 128
+    # Viewpoint-shift protocol (see robosuite_sim/camera.py). null = training
+    # view; 0 = orbit of 0 deg (exact identity, sanity check).
+    cam_shift_deg: null
+    cam_shift_mode: azimuth_elev
+    cam_elev_ratio: 0.3
+    cam_elev_cap_deg: 15.0
+    cam_radius_scale: 1.0
+
+data:
+  dataset:
+    num_points: 1024
+    num_workers: 8
+
+training:
+  num_epochs: 200
+  save_interval: 50
+  num_eval_episodes: 20
+
+eval:
+  last_ckpt: 199

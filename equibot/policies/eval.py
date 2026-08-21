@@ -1,5 +1,6 @@
 import os
 import sys
+import json
 import time
 import torch
 import hydra
@@ -186,6 +187,7 @@ def run_eval(
             metrics["vis_pc"] = wandb.Object3D(sample_pc)
     else:
         metrics["vis_rollout"] = images
+    metrics["rew_values"] = rews
     return metrics
 
 
@@ -206,6 +208,7 @@ def main(cfg):
             config=wandb_config,
         )
     np.random.seed(cfg.seed)
+    torch.manual_seed(cfg.seed)  # diffusion noise; numpy alone leaves rollouts non-reproducible
 
     if cfg.env.vectorize:
         env_fns = []
@@ -262,6 +265,14 @@ def main(cfg):
         mean_rew = eval_metrics["rew"]
         print(f"Evaluation results: mean rew = {mean_rew}")
         rew_list.append(mean_rew)
+        results = {"success_rate": float(mean_rew), "ckpt": ckpt_path,
+                   "num_episodes": int(cfg.training.num_eval_episodes),
+                   "rew_values": [float(r) for r in eval_metrics["rew_values"]]}
+        if hasattr(env, "episode_log"):
+            results["episodes"] = env.episode_log
+            results["env_args"] = OmegaConf.to_container(cfg.env.args, resolve=True)
+        with open(os.path.join(os.getcwd(), "eval_results.json"), "w") as fh:
+            json.dump(results, fh, indent=2)
         if cfg.use_wandb:
             wandb.log(
                 {"eval/" + k: v for k, v in eval_metrics.items() if k != "vis_rollout"}

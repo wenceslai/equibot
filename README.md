@@ -6,6 +6,8 @@ Jingyun Yang*, Zi-ang Cao*, Congyue Deng, Rika Antonova, Shuran Song, Jeannette 
 
 ![Overview figure](https://equi-bot.github.io/images/teaser.jpg)
 
+> **Robosuite / MimicGen viewpoint-robustness baseline:** see [README_VIEWPOINT.md](README_VIEWPOINT.md) — one script runs download → data → train → camera-orbit eval sweep → results table.
+
 This repository includes:
 
 * Implementation of the EquiBot method and a Diffusion Policy baseline that takes point clouds as input.

@@ -1,0 +1,155 @@
+#!/usr/bin/env bash
+# ═══════════════════════════════════════════════════════════════════════════
+# EquiBot viewpoint-robustness experiment, end to end:
+#   download demos -> convert to point-cloud dataset -> train one policy per
+#   task on the TRAINING camera -> evaluate it with the camera orbited by
+#   0/5/15/30/45/60/90 deg -> results table.
+#
+# Everything is an env var with a default; nothing needs editing.
+#
+#   bash scripts/run_viewpoint_experiment.sh                      # everything
+#   SMOKE=1 bash scripts/run_viewpoint_experiment.sh              # 10-min sanity run
+#   STAGES="eval collect" TASKS=can ANGLES="0 30" bash scripts/run_viewpoint_experiment.sh
+#   AGENT=dp bash scripts/run_viewpoint_experiment.sh             # point-cloud DP baseline
+#
+# Stages are idempotent: a stage whose output already exists is skipped
+# (FORCE=1 re-runs it). Safe to resubmit after a time-out.
+# ═══════════════════════════════════════════════════════════════════════════
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
+
+# ─── Knobs ────────────────────────────────────────────────────────────────
+TASKS=${TASKS:-"can square_d1 stack_d1 stack_three_d1"}   # keys of tasks.TASK_SPECS
+ANGLES=${ANGLES:-"0 5 15 30 45 60 90"}                     # camera orbit, degrees
+AGENT=${AGENT:-equibot}                                    # equibot | dp
+STAGES=${STAGES:-"download data train eval collect"}
+NUM_DEMOS=${NUM_DEMOS:-200}          # demos per task used for training
+EPOCHS=${EPOCHS:-200}                # ~1k iters/epoch at 200 demos -> ~200k iters
+N_EPISODES=${N_EPISODES:-20}         # eval episodes per (task, angle)
+SEED=${SEED:-0}
+RESOLUTION=${RESOLUTION:-256}        # render size for depth/segmentation
+MAX_STEPS=${MAX_STEPS:-600}          # env steps per eval episode
+INIT_STATES=${INIT_STATES:-random}   # random (fresh layouts from the env sampler) | demo (HDF5 layouts, in demo order)
+CAM_SHIFT_MODE=${CAM_SHIFT_MODE:-azimuth_elev}   # sphere | azimuth | azimuth_elev
+CAM_ELEV_RATIO=${CAM_ELEV_RATIO:-0.3}
+CAM_ELEV_CAP_DEG=${CAM_ELEV_CAP_DEG:-15}
+DATA_ROOT=${DATA_ROOT:-$ROOT/data}
+LOG_ROOT=${LOG_ROOT:-$ROOT/logs}
+USE_WANDB=${USE_WANDB:-false}        # true needs wandb.entity/project in configs/base.yaml
+FORCE=${FORCE:-0}
+SMOKE=${SMOKE:-0}
+export MUJOCO_GL=${MUJOCO_GL:-egl}   # egl (GPU) | osmesa (CPU, slow but always works)
+[ "$MUJOCO_GL" = osmesa ] && export PYOPENGL_PLATFORM=osmesa
+
+if [ "$SMOKE" = 1 ]; then
+    NUM_DEMOS=3; EPOCHS=2; N_EPISODES=2; MAX_STEPS=40
+    [ "${ANGLES}" = "0 5 15 30 45 60 90" ] && ANGLES="0 30"
+    echo "[smoke] NUM_DEMOS=$NUM_DEMOS EPOCHS=$EPOCHS N_EPISODES=$N_EPISODES ANGLES='$ANGLES' MAX_STEPS=$MAX_STEPS"
+fi
+
+echo "════ EquiBot viewpoint experiment ════"
+echo "AGENT=$AGENT TASKS='$TASKS' ANGLES='$ANGLES' STAGES='$STAGES'"
+echo "NUM_DEMOS=$NUM_DEMOS EPOCHS=$EPOCHS N_EPISODES=$N_EPISODES SEED=$SEED"
+echo "CAM_SHIFT_MODE=$CAM_SHIFT_MODE (elev ratio $CAM_ELEV_RATIO, cap $CAM_ELEV_CAP_DEG) INIT_STATES=$INIT_STATES"
+echo "DATA_ROOT=$DATA_ROOT LOG_ROOT=$LOG_ROOT MUJOCO_GL=$MUJOCO_GL"
+mkdir -p "$DATA_ROOT/demos" "$LOG_ROOT"
+
+has_stage() { [[ " $STAGES " == *" $1 "* ]]; }
+hdf5_of()   { echo "$DATA_ROOT/demos/$1.hdf5"; }
+pcs_of()    { echo "$DATA_ROOT/equibot/$1/pcs"; }
+train_prefix() { echo "train_${1}_${AGENT}"; }
+ckpt_of()   { printf "%s/train/%s/ckpt%05d.pth" "$LOG_ROOT" "$(train_prefix "$1")" $((EPOCHS - 1)); }
+
+# ─── Preflight: imports ───────────────────────────────────────────────────
+python - "$TASKS" <<'PY'
+import importlib, sys
+missing = []
+for m in ["torch", "robosuite", "h5py", "hydra", "diffusers", "equibot"]:
+    try: importlib.import_module(m)
+    except Exception as e: missing.append(f"{m}: {e}")
+try: from pytorch3d.ops.knn import knn_points  # noqa
+except Exception as e: missing.append(f"pytorch3d: {e}")
+from equibot.envs.robosuite_sim.tasks import TASK_SPECS, MIMICGEN_ENVS
+tasks = sys.argv[1].split()
+bad = [t for t in tasks if t not in TASK_SPECS]
+if bad: missing.append(f"unknown TASKS {bad}; known: {sorted(TASK_SPECS)}")
+if any(TASK_SPECS[t]["env_name"] in MIMICGEN_ENVS for t in tasks if t in TASK_SPECS):
+    try: import mimicgen  # noqa
+    except Exception as e: missing.append(f"mimicgen (needed for MimicGen tasks): {e}")
+import robosuite
+if not robosuite.__version__.startswith("1.4"):
+    missing.append(f"robosuite {robosuite.__version__}: need 1.4.x (mimicgen + the demo XMLs)")
+if missing:
+    print("PREFLIGHT FAILED:\n  " + "\n  ".join(missing)); sys.exit(1)
+print("preflight ok: torch, robosuite", robosuite.__version__)
+PY
+
+# ─── Stage: download ──────────────────────────────────────────────────────
+if has_stage download; then
+    for task in $TASKS; do
+        f=$(hdf5_of "$task")
+        if [ -f "$f" ] && [ "$FORCE" != 1 ]; then echo "[download] $f exists"; continue; fi
+        url=$(python -m equibot.envs.robosuite_sim.tasks url "$task")
+        echo "[download] $task <- $url"
+        wget -c -O "$f.part" "$url" && mv "$f.part" "$f"
+    done
+fi
+
+# ─── Stage: data (replay demos -> point-cloud npz) ────────────────────────
+if has_stage data; then
+    for task in $TASKS; do
+        out="$DATA_ROOT/equibot/$task"
+        if [ -f "$out/meta.json" ] && [ "$FORCE" != 1 ]; then echo "[data] $out exists"; continue; fi
+        python -m equibot.envs.robosuite_sim.generate_demos \
+            --dataset "$(hdf5_of "$task")" --task "$task" --out_dir "$out" \
+            --num_demos "$NUM_DEMOS" --resolution "$RESOLUTION" --seed "$SEED"
+    done
+fi
+
+# ─── Stage: train ─────────────────────────────────────────────────────────
+if has_stage train; then
+    for task in $TASKS; do
+        ckpt=$(ckpt_of "$task")
+        if [ -f "$ckpt" ] && [ "$FORCE" != 1 ]; then echo "[train] $ckpt exists"; continue; fi
+        prefix=$(train_prefix "$task")
+        python -m equibot.policies.train --config-name "robosuite_${AGENT}" \
+            mode=train prefix="$prefix" hydra.run.dir="$LOG_ROOT/train/$prefix" \
+            use_wandb="$USE_WANDB" seed="$SEED" \
+            training.num_epochs="$EPOCHS" \
+            data.dataset.path="$(pcs_of "$task")" \
+            env.args.dataset_path="$(hdf5_of "$task")" env.args.task_name="$task" \
+            env.args.resolution="$RESOLUTION"
+        [ -f "$ckpt" ] || { echo "[train] expected $ckpt after training" >&2; exit 1; }
+    done
+fi
+
+# ─── Stage: eval sweep ────────────────────────────────────────────────────
+if has_stage eval; then
+    for task in $TASKS; do
+        ckpt=$(ckpt_of "$task")
+        [ -f "$ckpt" ] || { echo "[eval] missing checkpoint $ckpt (run the train stage)" >&2; exit 1; }
+        for deg in $ANGLES; do
+            prefix="eval_${task}_${AGENT}_cam${deg}"
+            dir="$LOG_ROOT/eval/$prefix"
+            if [ -f "$dir/eval_results.json" ] && [ "$FORCE" != 1 ]; then echo "[eval] $prefix done"; continue; fi
+            python -m equibot.policies.eval --config-name "robosuite_${AGENT}" \
+                mode=eval prefix="$prefix" hydra.run.dir="$dir" \
+                use_wandb="$USE_WANDB" seed="$SEED" \
+                training.ckpt="$ckpt" training.num_eval_episodes="$N_EPISODES" \
+                data.dataset.path="$(pcs_of "$task")" \
+                env.args.dataset_path="$(hdf5_of "$task")" env.args.task_name="$task" \
+                env.args.resolution="$RESOLUTION" env.args.max_episode_length="$MAX_STEPS" \
+                env.args.init_states="$INIT_STATES" \
+                env.args.cam_shift_deg="$deg" env.args.cam_shift_mode="$CAM_SHIFT_MODE" \
+                env.args.cam_elev_ratio="$CAM_ELEV_RATIO" env.args.cam_elev_cap_deg="$CAM_ELEV_CAP_DEG"
+        done
+    done
+fi
+
+# ─── Stage: collect ───────────────────────────────────────────────────────
+if has_stage collect; then
+    python scripts/collect_results.py --log_root "$LOG_ROOT" --agent "$AGENT" \
+        --tasks $TASKS --angles $ANGLES --out "$LOG_ROOT/results_${AGENT}"
+fi
+echo "════ done ════"
