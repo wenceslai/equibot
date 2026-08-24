@@ -11,11 +11,15 @@ import re
 import sys
 from collections import defaultdict
 
+import os
 import numpy as np
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+from equibot.envs.robosuite_sim.sim_utils import fallback_pc  # noqa: E402
 
 
 def repair(pcs_dir):
-    import glob, os
+    import glob
     files = sorted(glob.glob(os.path.join(pcs_dir, "*.npz")))
     eps = defaultdict(list)
     for f in files:
@@ -28,10 +32,8 @@ def repair(pcs_dir):
             d = dict(np.load(f))
             if len(d["pc"]) == 0:
                 if prev_pc is None:
-                    raise SystemExit(
-                        f"{f}: FIRST frame of {ep} is empty — the dataset is "
-                        f"broken (wrong gt_bodies / renderer), regenerate it")
-                d["pc"] = prev_pc
+                    print(f"[WARN] {f}: FIRST frame of {ep} empty — sentinel cloud")
+                d["pc"] = prev_pc if prev_pc is not None else fallback_pc()
                 np.savez(f, **d)
                 n_fixed += 1
             else:

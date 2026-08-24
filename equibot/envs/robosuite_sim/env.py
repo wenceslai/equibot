@@ -21,6 +21,7 @@ from .camera import T_cam_world_from_sim, orbit_shift_camera, table_z_for_env
 from .sim_utils import (
     build_env,
     camera_params,
+    fallback_pc,
     equibot_to_osc_action,
     load_init_states,
     make_state,
@@ -124,13 +125,14 @@ class RobosuiteEnv:
         rgb, depth_m, seg = render_frames(self._obs, self.camera, self.znear, self.zfar)
         pc = object_point_cloud(depth_m, seg, self.geom_ids, self.K, self.T_wc,
                                 max_points=self.max_points)
-        if len(pc) == 0 and self._last_pc is not None:
-            # Transient full occlusion — same carry-forward as the dataset
-            # converter, so train and eval see the same treatment. (An empty
-            # cloud would otherwise end the episode inside run_eval.)
+        if len(pc) == 0:
+            # Full occlusion — same treatment as the dataset converter: carry
+            # the last visible cloud forward, or the sentinel blob if nothing
+            # was ever visible. (An empty cloud would otherwise end the
+            # episode inside run_eval; a degenerate one would NaN the encoder.)
             self._empty_frames += 1
-            pc = self._last_pc
-        elif len(pc) > 0:
+            pc = self._last_pc if self._last_pc is not None else fallback_pc()
+        else:
             self._last_pc = pc
         s = max(1, rgb.shape[0] // self.video_resolution)
         return {"pc": pc, "images": [rgb[::s, ::s]]}

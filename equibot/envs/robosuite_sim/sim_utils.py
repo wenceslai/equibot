@@ -24,6 +24,18 @@ from .tasks import TASK_SPECS, register_mimicgen_envs
 PANDA_MAX_OPEN_WIDTH = 0.08
 
 
+def fallback_pc() -> np.ndarray:
+    """Null-observation sentinel for frames with no visible object pixels and
+    no previous cloud to carry forward: a 1 cm cube of 8 points at the world
+    origin. NOT a zero vector / single point on purpose — EquiBot divides by
+    the cloud's spread (`z_scale`), so a degenerate cloud would produce NaNs;
+    this blob is merely far out-of-distribution, so such an episode just
+    plays out (and fails) instead of crashing."""
+    c = np.array([[x, y, z] for x in (-1, 1) for y in (-1, 1) for z in (-1, 1)],
+                 dtype=np.float32)
+    return c * 0.005
+
+
 # ─────────────────────────── env construction ──────────────────────────────
 
 def load_env_meta(hdf5_path: str) -> dict:

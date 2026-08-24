@@ -169,8 +169,10 @@ repo's per-episode log.
   2026-08-24 can be fixed in place with
   `python scripts/repair_empty_pcs.py $DATA_ROOT/equibot/*/pcs`;
   the converter and the eval env now carry the last visible cloud forward
-  through such frames (`empty_frames_carried` in `meta.json`,
-  `occluded_frames` per episode in `eval_results.json`).
+  through such frames — or a fixed sentinel blob if nothing was visible yet —
+  (`empty_frames_carried` in `meta.json`, `occluded_frames` per episode in
+  `eval_results.json`). Many such frames still means something is wrong with
+  the segmentation — look at a `preview_ep*.png`.
 * **Angle 0 must match the training-view number** (the orbit is an exact
   identity at 0°). If it doesn't, something in the env, not the camera, is
   off.

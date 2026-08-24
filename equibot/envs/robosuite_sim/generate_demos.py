@@ -28,6 +28,7 @@ from tqdm import tqdm
 from .camera import T_cam_world_from_sim
 from .sim_utils import (
     build_env,
+    fallback_pc,
     camera_params,
     load_init_states,
     make_state,
@@ -111,18 +112,16 @@ def main():
                                         max_points=args.max_points, rng=rng)
                 n_points_stats.append(len(pc))
                 if len(pc) == 0:
-                    # Transient full occlusion (e.g. the gripper covering the
-                    # nut mid-grasp): carry the last visible cloud forward —
-                    # an empty pc would crash BaseDataset's np.random.choice.
-                    if prev_pc is None:
-                        raise SystemExit(
-                            f"{demo_key} t={t}: no object pixels in the FIRST "
-                            f"frame — wrong gt_bodies or a broken offscreen "
-                            f"renderer; check {args.out_dir}/preview_ep*.png")
+                    # Full occlusion (e.g. the gripper covering the nut
+                    # mid-grasp): carry the last visible cloud forward — an
+                    # empty pc would crash BaseDataset's np.random.choice.
+                    # No previous cloud yet (empty from the very first frame)
+                    # -> a fixed sentinel blob; see sim_utils.fallback_pc.
                     n_empty += 1
-                    print(f"[WARN] {demo_key} t={t}: objects fully occluded — "
-                          f"carrying previous frame's cloud forward")
-                    pc = prev_pc
+                    print(f"[WARN] {demo_key} t={t}: no object pixels — using "
+                          + ("previous frame's cloud" if prev_pc is not None
+                             else "fallback sentinel cloud"))
+                    pc = prev_pc if prev_pc is not None else fallback_pc()
                 else:
                     prev_pc = pc
                 np.savez(
