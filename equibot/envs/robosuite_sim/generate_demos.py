@@ -75,6 +75,7 @@ def main():
     print(f"[generate_demos] {env_name}: {len(init_states)} demos -> {pcs_dir}")
 
     n_success = 0
+    n_empty = 0
     ep_lengths = {}
     n_points_stats = []
     meta_cam = None
@@ -100,6 +101,7 @@ def main():
                 print(f"[WARN] {demo_key}: training camera differs from demo 0's")
 
             ep_idx = int(demo_key.split("_")[1])
+            prev_pc = None
             for t, (state, action) in enumerate(zip(states, actions)):
                 sim.set_state_from_flattened(state)
                 sim.forward()
@@ -107,9 +109,22 @@ def main():
                 rgb, depth_m, seg = render_frames(obs, args.camera, znear, zfar)
                 pc = object_point_cloud(depth_m, seg, geom_ids, K, T_wc,
                                         max_points=args.max_points, rng=rng)
-                if len(pc) == 0:
-                    print(f"[WARN] {demo_key} t={t}: no object pixels visible")
                 n_points_stats.append(len(pc))
+                if len(pc) == 0:
+                    # Transient full occlusion (e.g. the gripper covering the
+                    # nut mid-grasp): carry the last visible cloud forward —
+                    # an empty pc would crash BaseDataset's np.random.choice.
+                    if prev_pc is None:
+                        raise SystemExit(
+                            f"{demo_key} t={t}: no object pixels in the FIRST "
+                            f"frame — wrong gt_bodies or a broken offscreen "
+                            f"renderer; check {args.out_dir}/preview_ep*.png")
+                    n_empty += 1
+                    print(f"[WARN] {demo_key} t={t}: objects fully occluded — "
+                          f"carrying previous frame's cloud forward")
+                    pc = prev_pc
+                else:
+                    prev_pc = pc
                 np.savez(
                     os.path.join(pcs_dir, f"{args.task}_ep{ep_idx:03d}_t{t:04d}.npz"),
                     pc=pc,
@@ -128,7 +143,9 @@ def main():
           f"({n_success}/{len(init_states)}); ~1.0 expected for robomimic ph, "
           f"~0.7 is NORMAL for MimicGen (terminal state not stored).")
     print(f"[generate_demos] points/frame: min {np.min(n_points_stats)}, "
-          f"median {np.median(n_points_stats):.0f}; {time.time() - t0:.0f}s")
+          f"median {np.median(n_points_stats):.0f}; "
+          f"{n_empty} fully-occluded frames carried forward; "
+          f"{time.time() - t0:.0f}s")
     with open(os.path.join(args.out_dir, "meta.json"), "w") as fh:
         json.dump({
             "task": args.task, "env_name": env_name, "dataset": os.path.abspath(args.dataset),
@@ -136,6 +153,7 @@ def main():
             "gt_bodies": spec["gt_bodies"], "max_points": args.max_points,
             "num_demos": len(init_states), "episode_lengths": ep_lengths,
             "replay_success_rate": rate, "min_points": int(np.min(n_points_stats)),
+            "empty_frames_carried": n_empty,
             **meta_cam,
         }, fh, indent=2)
     env.close()

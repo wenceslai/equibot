@@ -113,6 +113,8 @@ class RobosuiteEnv:
         self._obs = obs
         self._t = 0
         self._success = False
+        self._last_pc = None
+        self._empty_frames = 0
         self._ep += 1
         self.episode_log.append({"episode": ep, "demo_key": demo_key,
                                  "seed": self.seed + ep, "camera": cam})
@@ -122,6 +124,14 @@ class RobosuiteEnv:
         rgb, depth_m, seg = render_frames(self._obs, self.camera, self.znear, self.zfar)
         pc = object_point_cloud(depth_m, seg, self.geom_ids, self.K, self.T_wc,
                                 max_points=self.max_points)
+        if len(pc) == 0 and self._last_pc is not None:
+            # Transient full occlusion — same carry-forward as the dataset
+            # converter, so train and eval see the same treatment. (An empty
+            # cloud would otherwise end the episode inside run_eval.)
+            self._empty_frames += 1
+            pc = self._last_pc
+        elif len(pc) > 0:
+            self._last_pc = pc
         s = max(1, rgb.shape[0] // self.video_resolution)
         return {"pc": pc, "images": [rgb[::s, ::s]]}
 
@@ -134,7 +144,8 @@ class RobosuiteEnv:
             self._success = True
         done = self._success or self._t >= self.max_episode_length
         if done:
-            self.episode_log[-1].update(success=bool(self._success), steps=self._t)
+            self.episode_log[-1].update(success=bool(self._success), steps=self._t,
+                                        occluded_frames=self._empty_frames)
         rew = 0.0 if dummy_reward else float(self._success)
         return make_state(obs)[None], rew, done, {}
 

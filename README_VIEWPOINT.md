@@ -163,6 +163,14 @@ repo's per-episode log.
 * **points/frame min** in `meta.json`: should be in the hundreds at 256².
   A `no object pixels visible` warning means a `gt_bodies` name is wrong or
   the object left the view.
+* **Fully-occluded frames** (`ValueError: a must be greater than 0` from
+  `np.random.choice` during training): a stored frame had an empty cloud —
+  the gripper briefly covered every object pixel. Datasets generated before
+  2026-08-24 can be fixed in place with
+  `python scripts/repair_empty_pcs.py $DATA_ROOT/equibot/*/pcs`;
+  the converter and the eval env now carry the last visible cloud forward
+  through such frames (`empty_frames_carried` in `meta.json`,
+  `occluded_frames` per episode in `eval_results.json`).
 * **Angle 0 must match the training-view number** (the orbit is an exact
   identity at 0°). If it doesn't, something in the env, not the camera, is
   off.
