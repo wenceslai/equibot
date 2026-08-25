@@ -191,6 +191,13 @@ class BaseDataset(Dataset):
 
         if "pc" in keys:
             xyz = data["pc"].astype(np.float32)
+            if xyz.shape[0] == 0:
+                # Frame with no visible object pixels (full occlusion) that
+                # was stored before the converter learned to carry clouds
+                # forward — an empty array crashes np.random.choice below.
+                # Same sentinel the converter/eval use; numpy-only import.
+                from equibot.envs.robosuite_sim.sim_utils import fallback_pc
+                xyz = fallback_pc()
         if "eef_pos" in keys:
             eef_pos = data["eef_pos"].astype(np.float32)
             eef_pos = eef_pos.reshape(self.num_eef, -1)

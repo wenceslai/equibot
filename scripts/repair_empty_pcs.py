@@ -21,6 +21,10 @@ from equibot.envs.robosuite_sim.sim_utils import fallback_pc  # noqa: E402
 def repair(pcs_dir):
     import glob
     files = sorted(glob.glob(os.path.join(pcs_dir, "*.npz")))
+    if not files:
+        raise SystemExit(
+            f"{pcs_dir}: no .npz files here — wrong path? (an unset "
+            f"$DATA_ROOT makes '$DATA_ROOT/equibot/*/pcs' point nowhere)")
     eps = defaultdict(list)
     for f in files:
         m = re.match(r"(.+)_t(\d+)\.npz$", os.path.basename(f))
