@@ -92,9 +92,8 @@ Square, App. E/G):
   scale normalization, no augmentation for EquiBot, random-init eval.
 * `model.hidden_dim: 128` — the paper's value for every 3D task; the released
   configs ship 32. We follow the paper.
-* `EPOCHS=1000` at 200 demos ≈ 1M gradient steps, matching the paper's
-  robomimic recipe (2000 epochs on 25–100 demos ≈ up to 750k steps). The
-  exact-paper alternative is `NUM_DEMOS=100 EPOCHS=2000`.
+* `NUM_DEMOS=100 EPOCHS=2000` — exactly the paper's largest robomimic
+  setup (they train 2000 epochs on 25/50/100 demos), ≈750k gradient steps.
 * 1024 points vs the paper's 256 (Can) / 512 (Square): the paper reduces
   points only to speed up training, "without hurting performance".
 * Point-cloud construction for robomimic is unspecified in the paper and
@@ -135,8 +134,8 @@ All knobs are environment variables (defaults in the script header):
 | `ANGLES` | `0 5 15 30 45 60 90` | camera orbit degrees; 0 = identity sanity check |
 | `AGENT` | `equibot` | `equibot` or `dp` |
 | `STAGES` | `download data train eval collect` | any subset |
-| `NUM_DEMOS` | 200 | demos used for training (can ph has 200; MimicGen 1000) |
-| `EPOCHS` | 200 | ≈1k optimizer steps per epoch at 200 demos |
+| `NUM_DEMOS` | 100 | demos used for training — the paper's robomimic setup (can ph has 200 available; MimicGen 1000) |
+| `EPOCHS` | 2000 | the paper's robomimic setup (≈750k optimizer steps at 100 demos) |
 | `N_EPISODES` | 20 | eval episodes per (task, angle) |
 | `CAM_SHIFT_MODE` | `azimuth_elev` | `sphere` / `azimuth` / `azimuth_elev` (+ `CAM_ELEV_RATIO`, `CAM_ELEV_CAP_DEG`) |
 | `INIT_STATES` | `random` | `random` = fresh layouts from the env sampler (held-out by construction); `demo` = the HDF5 layouts in demo order (the first ones are training layouts) |
@@ -222,9 +221,9 @@ repo's per-episode log.
 ## Compute
 
 At 200 demos (≈30k frames/task) and 256² OSMesa rendering, the data stage is
-~20–40 min per task (EGL much faster). Training at `EPOCHS=200` is ≈200k
-iterations ≈ 4–6 h per task on one GPU (EquiBot's default for its own tasks
-is ~150k). The eval sweep is 7 angles × 20 episodes × ≤600 steps with a
+~20–40 min per task (EGL much faster). Training at the paper recipe
+(100 demos × 2000 epochs ≈ 750k iterations) is roughly a day per task on one
+GPU — use `scripts/submit_all.sh` to give each task its own GPU. The eval sweep is 7 angles × 20 episodes × ≤600 steps with a
 100-step DDPM per 8 executed actions: ≈1–2 h per task. Everything is
 embarrassingly parallel across tasks and across angles (see the SLURM
 example).

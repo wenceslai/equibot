@@ -39,9 +39,9 @@ model:
   hidden_dim: 128
 
 training:
-  num_epochs: 1000
+  num_epochs: 2000
   save_interval: 50
   num_eval_episodes: 20
 
 eval:
-  last_ckpt: 999
+  last_ckpt: 1999
