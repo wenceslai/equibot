@@ -176,6 +176,17 @@ repo's per-episode log.
 * **Angle 0 must match the training-view number** (the orbit is an exact
   identity at 0°). If it doesn't, something in the env, not the camera, is
   off.
+* **An `n=` smaller than `N_EPISODES` in the results table means a stale
+  eval** (e.g. an old smoke run). Smoke runs are isolated under
+  `$DATA_ROOT/smoke` / `$LOG_ROOT/smoke`, and the stage skips re-run anything
+  whose dataset size, checkpoint age, or episode count doesn't match the
+  current settings — so a plain re-run of the script repairs this. Real-run
+  rollout videos are `vis_ckpt<EPOCHS-1>_ep*.mp4`; `vis_ckpt00001_*` files
+  are from a 2-epoch smoke checkpoint.
+* **Long-horizon tasks vs `MAX_STEPS`**: compare `episode_lengths` in
+  `data/equibot/<task>/meta.json` with `MAX_STEPS` (600). If demos routinely
+  approach or exceed it (stack_three_d1 is the candidate), the policy cannot
+  finish in time — re-run that task's eval with e.g. `MAX_STEPS=1000`.
 * Rollouts are seeded (`np.random` and `torch`), but 20 episodes is still
   noisy: differences of ±0.1 between adjacent angles are within noise.
 

@@ -45,7 +45,15 @@ export MUJOCO_GL=${MUJOCO_GL:-egl}   # egl (GPU) | osmesa (CPU, slow but always 
 if [ "$SMOKE" = 1 ]; then
     NUM_DEMOS=3; EPOCHS=2; N_EPISODES=2; MAX_STEPS=40
     [ "${ANGLES}" = "0 5 15 30 45 60 90" ] && ANGLES="0 30"
+    # Own roots: a smoke run must never leave 3-demo datasets / 2-epoch
+    # checkpoints / 2-episode eval results where the real run would pick
+    # them up via the skip-if-exists logic. (Demos are still shared.)
+    DEMO_DIR="$DATA_ROOT/demos"
+    DATA_ROOT="$DATA_ROOT/smoke"; LOG_ROOT="$LOG_ROOT/smoke"
+    mkdir -p "$DATA_ROOT/demos"
+    for f in "$DEMO_DIR"/*.hdf5; do [ -e "$f" ] && ln -sf "$f" "$DATA_ROOT/demos/"; done
     echo "[smoke] NUM_DEMOS=$NUM_DEMOS EPOCHS=$EPOCHS N_EPISODES=$N_EPISODES ANGLES='$ANGLES' MAX_STEPS=$MAX_STEPS"
+    echo "[smoke] outputs isolated under $DATA_ROOT and $LOG_ROOT"
 fi
 
 echo "════ EquiBot viewpoint experiment ════"
@@ -96,11 +104,35 @@ if has_stage download; then
     done
 fi
 
+# A dataset counts as done only if it was built with the CURRENT NUM_DEMOS —
+# a leftover from a smaller run (e.g. an old smoke run) must be rebuilt.
+data_ok() {  # $1 = task
+    python -c "import json,sys; m=json.load(open(sys.argv[1])); sys.exit(0 if m['num_demos']==int(sys.argv[2]) else 1)" \
+        "$DATA_ROOT/equibot/$1/meta.json" "$NUM_DEMOS" 2>/dev/null
+}
+# A checkpoint counts as done only if the dataset it trained on still matches:
+# same NUM_DEMOS and the data's meta.json is OLDER than the checkpoint.
+train_ok() {  # $1 = task
+    data_ok "$1" || return 1
+    python -c "import os,sys; c,m=sys.argv[1:3]; sys.exit(0 if os.path.exists(c) and os.path.getmtime(m)<os.path.getmtime(c) else 1)" \
+        "$(ckpt_of "$1")" "$DATA_ROOT/equibot/$1/meta.json" 2>/dev/null
+}
+# An eval counts as done only if it scored >= the current N_EPISODES and ran
+# AFTER the checkpoint it evaluates was written.
+eval_ok() {  # $1 = eval_results.json  $2 = ckpt
+    python -c "import json,os,sys; r,c=sys.argv[1:3]; d=json.load(open(r)); sys.exit(0 if len(d.get('rew_values',[]))>=int(sys.argv[3]) and os.path.getmtime(c)<os.path.getmtime(r) else 1)" \
+        "$1" "$2" "$N_EPISODES" 2>/dev/null
+}
+
 # ─── Stage: data (replay demos -> point-cloud npz) ────────────────────────
 if has_stage data; then
     for task in $TASKS; do
         out="$DATA_ROOT/equibot/$task"
-        if [ -f "$out/meta.json" ] && [ "$FORCE" != 1 ]; then echo "[data] $out exists"; continue; fi
+        if data_ok "$task" && [ "$FORCE" != 1 ]; then echo "[data] $out exists (num_demos=$NUM_DEMOS)"; continue; fi
+        if [ -d "$out" ]; then
+            echo "[data] $out is stale (different num_demos) — rebuilding"
+            rm -rf "$out"
+        fi
         python -m equibot.envs.robosuite_sim.generate_demos \
             --dataset "$(hdf5_of "$task")" --task "$task" --out_dir "$out" \
             --num_demos "$NUM_DEMOS" --resolution "$RESOLUTION" --seed "$SEED"
@@ -111,7 +143,7 @@ fi
 if has_stage train; then
     for task in $TASKS; do
         ckpt=$(ckpt_of "$task")
-        if [ -f "$ckpt" ] && [ "$FORCE" != 1 ]; then echo "[train] $ckpt exists"; continue; fi
+        if train_ok "$task" && [ "$FORCE" != 1 ]; then echo "[train] $ckpt exists and matches the dataset"; continue; fi
         prefix=$(train_prefix "$task")
         python -m equibot.policies.train --config-name "robosuite_${AGENT}" \
             mode=train prefix="$prefix" hydra.run.dir="$LOG_ROOT/train/$prefix" \
@@ -132,7 +164,7 @@ if has_stage eval; then
         for deg in $ANGLES; do
             prefix="eval_${task}_${AGENT}_cam${deg}"
             dir="$LOG_ROOT/eval/$prefix"
-            if [ -f "$dir/eval_results.json" ] && [ "$FORCE" != 1 ]; then echo "[eval] $prefix done"; continue; fi
+            if eval_ok "$dir/eval_results.json" "$ckpt" && [ "$FORCE" != 1 ]; then echo "[eval] $prefix done"; continue; fi
             python -m equibot.policies.eval --config-name "robosuite_${AGENT}" \
                 mode=eval prefix="$prefix" hydra.run.dir="$dir" \
                 use_wandb="$USE_WANDB" seed="$SEED" \
