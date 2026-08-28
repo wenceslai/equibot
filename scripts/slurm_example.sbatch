@@ -3,7 +3,7 @@
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=48G
-#SBATCH --time=24:00:00
+#SBATCH --time=48:00:00
 #SBATCH --output=logs/slurm-%x-%j.out
 # Adapt partition/account to your cluster. One job = one task, all stages.
 # For the fully parallel fan-out (per-task train jobs -> per-angle eval jobs

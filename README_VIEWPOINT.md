@@ -80,6 +80,30 @@ Two protocol decisions worth knowing:
   "attached" flag). It sits in the un-normalised scalar channel, so it is
   kept O(1).
 
+## Fidelity to the EquiBot paper
+
+Audited against arXiv:2407.01479v2 (which itself evaluates robomimic Can and
+Square, App. E/G):
+
+* Matches the paper exactly: 13-dim proprio (eef position, two rotation-matrix
+  columns, gravity direction, continuous gripper-openness scalar), 7-dim
+  action (position velocity + axis-angle angular velocity + gripper), horizons
+  2/16/8, DDPM with 100 denoising steps at inference, joint point-cloud/action
+  scale normalization, no augmentation for EquiBot, random-init eval.
+* `model.hidden_dim: 128` — the paper's value for every 3D task; the released
+  configs ship 32. We follow the paper.
+* `EPOCHS=1000` at 200 demos ≈ 1M gradient steps, matching the paper's
+  robomimic recipe (2000 epochs on 25–100 demos ≈ up to 750k steps). The
+  exact-paper alternative is `NUM_DEMOS=100 EPOCHS=2000`.
+* 1024 points vs the paper's 256 (Can) / 512 (Square): the paper reduces
+  points only to speed up training, "without hurting performance".
+* Point-cloud construction for robomimic is unspecified in the paper and
+  absent from the released code; we use the segmented-objects cloud described
+  under "What is being measured".
+* Their reported numbers average 3 seeds × last-5 checkpoints × 10 episodes;
+  this pipeline evaluates the final checkpoint of one seed (`N_EPISODES`
+  episodes) — keep that in mind when comparing absolute values.
+
 ## Install
 
 `scripts/install.sh` does the following; run it line by line if your cluster

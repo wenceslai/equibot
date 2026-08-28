@@ -25,7 +25,9 @@ ANGLES=${ANGLES:-"0 5 15 30 45 60 90"}                     # camera orbit, degre
 AGENT=${AGENT:-equibot}                                    # equibot | dp
 STAGES=${STAGES:-"download data train eval collect"}
 NUM_DEMOS=${NUM_DEMOS:-200}          # demos per task used for training
-EPOCHS=${EPOCHS:-200}                # ~1k iters/epoch at 200 demos -> ~200k iters
+EPOCHS=${EPOCHS:-1000}               # ~1k iters/epoch at 200 demos -> ~1M iters,
+                                     # matching the paper's robomimic recipe
+                                     # (2000 epochs on 25-100 demos ~ 750k iters)
 N_EPISODES=${N_EPISODES:-20}         # eval episodes per (task, angle)
 SEED=${SEED:-0}
 RESOLUTION=${RESOLUTION:-256}        # render size for depth/segmentation

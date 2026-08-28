@@ -32,10 +32,16 @@ data:
     num_points: 1024
     num_workers: 8
 
+# Paper (arXiv:2407.01479, App. E): "SIM(3)-equivariant PointNet++ with 4
+# layers and hidden dimensionality 128". The released configs ship 32; for
+# the robomimic-style precision tasks we follow the paper.
+model:
+  hidden_dim: 128
+
 training:
-  num_epochs: 200
+  num_epochs: 1000
   save_interval: 50
   num_eval_episodes: 20
 
 eval:
-  last_ckpt: 199
+  last_ckpt: 999
