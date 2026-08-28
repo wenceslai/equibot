@@ -21,7 +21,7 @@ cd "$ROOT"
 
 # ─── Knobs ────────────────────────────────────────────────────────────────
 TASKS=${TASKS:-"can square_d1 stack_d1 stack_three_d1"}   # keys of tasks.TASK_SPECS
-ANGLES=${ANGLES:-"0 5 15 30 45 60 90"}                     # camera orbit, degrees
+ANGLES=${ANGLES:-"0 5 15 30 45"}                           # camera orbit, degrees
 AGENT=${AGENT:-equibot}                                    # equibot | dp
 STAGES=${STAGES:-"download data train eval collect"}
 NUM_DEMOS=${NUM_DEMOS:-100}          # demos per task (paper recipe: 100)
@@ -44,7 +44,7 @@ export MUJOCO_GL=${MUJOCO_GL:-egl}   # egl (GPU) | osmesa (CPU, slow but always 
 
 if [ "$SMOKE" = 1 ]; then
     NUM_DEMOS=3; EPOCHS=2; N_EPISODES=2; MAX_STEPS=40
-    [ "${ANGLES}" = "0 5 15 30 45 60 90" ] && ANGLES="0 30"
+    [ "${ANGLES}" = "0 5 15 30 45" ] && ANGLES="0 30"
     # Own roots: a smoke run must never leave 3-demo datasets / 2-epoch
     # checkpoints / 2-episode eval results where the real run would pick
     # them up via the skip-if-exists logic. (Demos are still shared.)

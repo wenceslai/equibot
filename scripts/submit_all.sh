@@ -2,7 +2,7 @@
 # Submit the whole experiment as PARALLEL SLURM jobs with dependencies:
 #
 #   per task:   [download + data + train]          (4 jobs, run concurrently)
-#   per (task, angle): [eval]  after that task's train   (28 jobs)
+#   per (task, angle): [eval]  after that task's train   (20 jobs)
 #   finally:    [collect]      after every eval          (1 job)
 #
 # Wall time ~ one training + one eval instead of the ~10 h sequential run.
@@ -18,7 +18,7 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 TASKS=${TASKS:-"can square_d1 stack_d1 stack_three_d1"}
-ANGLES=${ANGLES:-"0 5 15 30 45 60 90"}
+ANGLES=${ANGLES:-"0 5 15 30 45"}
 EVAL_TIME=${EVAL_TIME:-4:00:00}     # per-eval-job time limit (overrides the sbatch header)
 SB=scripts/slurm_example.sbatch
 mkdir -p logs

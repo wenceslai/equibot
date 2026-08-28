@@ -39,7 +39,7 @@ cat $LOG_ROOT/results_equibot.md        # tasks x angles success rate
 
 The script downloads the demos, converts them, trains one policy per task on
 the training camera, evaluates every policy with the camera orbited by
-0/5/15/30/45/60/90°, and writes a tasks × angles success-rate table. Every
+0/5/15/30/45°, and writes a tasks × angles success-rate table. Every
 stage is skipped if its output exists, so re-submitting after a time-out
 resumes where it stopped. If something breaks, the log line names the stage;
 `SMOKE=1 TASKS=can bash scripts/run_viewpoint_experiment.sh` re-runs the
@@ -131,7 +131,7 @@ All knobs are environment variables (defaults in the script header):
 | var | default | meaning |
 |---|---|---|
 | `TASKS` | `can square_d1 stack_d1 stack_three_d1` | any subset of `tasks.TASK_SPECS` (also `square` = robomimic square ph) |
-| `ANGLES` | `0 5 15 30 45 60 90` | camera orbit degrees; 0 = identity sanity check |
+| `ANGLES` | `0 5 15 30 45` | camera orbit degrees; 0 = identity sanity check |
 | `AGENT` | `equibot` | `equibot` or `dp` |
 | `STAGES` | `download data train eval collect` | any subset |
 | `NUM_DEMOS` | 100 | demos used for training — the paper's robomimic setup (can ph has 200 available; MimicGen 1000) |
