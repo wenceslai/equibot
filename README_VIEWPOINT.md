@@ -21,11 +21,16 @@ export DATA_ROOT=/scratch/$USER/equibot_data
 export LOG_ROOT=/scratch/$USER/equibot_logs
 
 # 4. run everything (needs a GPU node; set MUJOCO_GL=osmesa if you get EGL errors)
-bash scripts/run_viewpoint_experiment.sh
-#    or one SLURM job per task (edit partition/account in the sbatch first;
-#    DATA_ROOT/LOG_ROOT are inherited by sbatch):
-#      for t in can square_d1 stack_d1 stack_three_d1; do TASKS=$t sbatch scripts/slurm_example.sbatch; done
-#      STAGES=collect bash scripts/run_viewpoint_experiment.sh      # after all four finished
+bash scripts/run_viewpoint_experiment.sh          # sequential, ~10 h on one GPU
+#    PARALLEL on SLURM (recommended): edit partition/account in
+#    scripts/slurm_example.sbatch once, then ONE command submits per-task
+#    train jobs, per-(task,angle) eval jobs with dependencies, and a final
+#    collect job — wall time ~ one training + one eval (~3-4 h):
+#      bash scripts/submit_all.sh
+#    On a single multi-GPU box instead: one script instance per task/GPU:
+#      TASKS=can            CUDA_VISIBLE_DEVICES=0 bash scripts/run_viewpoint_experiment.sh &
+#      TASKS=square_d1      CUDA_VISIBLE_DEVICES=1 bash scripts/run_viewpoint_experiment.sh &
+#      ... ; wait ; STAGES=collect bash scripts/run_viewpoint_experiment.sh
 
 # 5. result
 cat $LOG_ROOT/results_equibot.md        # tasks x angles success rate
