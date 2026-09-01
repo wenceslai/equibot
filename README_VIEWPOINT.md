@@ -92,8 +92,12 @@ Square, App. E/G):
   scale normalization, no augmentation for EquiBot, random-init eval.
 * `model.hidden_dim: 128` — the paper's value for every 3D task; the released
   configs ship 32. We follow the paper.
-* `NUM_DEMOS=100 EPOCHS=2000` — exactly the paper's largest robomimic
-  setup (they train 2000 epochs on 25/50/100 demos), ≈750k gradient steps.
+* Training budget: the paper trains 2000 epochs on 25/50/100 demos (≈750k
+  gradient steps at 100 demos). We train on more demos (200/800), where "2000
+  epochs" is undefined by the paper, so the script holds the *step budget*
+  constant instead: epochs = `STEPS_TARGET` / steps-per-epoch, computed per
+  task from the dataset on disk (default 1.5M steps ≈ 2× paper). The exact
+  paper setup is `NUM_DEMOS=100 EPOCHS=2000`.
 * Point-cloud sizes per task follow the paper: 256 (can), 512 (square /
   square_d1); the stacks are not in the paper and use their 1024 default.
   `env.args.num_points` interpolates from `data.dataset.num_points`, so train
@@ -136,8 +140,8 @@ All knobs are environment variables (defaults in the script header):
 | `ANGLES` | `0 5 15 30 45` | camera orbit degrees; 0 = identity sanity check |
 | `AGENT` | `equibot` | `equibot` or `dp` |
 | `STAGES` | `download data train eval collect` | any subset |
-| `NUM_DEMOS` | 100 | demos used for training — the paper's robomimic setup (can ph has 200 available; MimicGen 1000) |
-| `EPOCHS` | 2000 | the paper's robomimic setup (≈750k optimizer steps at 100 demos) |
+| `NUM_DEMOS` | per task | can/square: 200 (all ph demos); MimicGen tasks: 800. Set to force one count for all tasks |
+| `EPOCHS` | auto | computed per task from the dataset size to run `STEPS_TARGET` optimizer steps (default 1.5M ≈ 2× the paper's budget; at can's 200 demos this lands on ≈2000 epochs). Set to force an epoch count |
 | `N_EPISODES` | 20 | eval episodes per (task, angle) |
 | `CAM_SHIFT_MODE` | `azimuth_elev` | `sphere` / `azimuth` / `azimuth_elev` (+ `CAM_ELEV_RATIO`, `CAM_ELEV_CAP_DEG`) |
 | `INIT_STATES` | `random` | `random` = fresh layouts from the env sampler (held-out by construction); `demo` = the HDF5 layouts in demo order (the first ones are training layouts) |

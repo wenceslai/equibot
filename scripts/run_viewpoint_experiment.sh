@@ -24,8 +24,17 @@ TASKS=${TASKS:-"can square_d1 stack_d1 stack_three_d1"}   # keys of tasks.TASK_S
 ANGLES=${ANGLES:-"0 5 15 30 45"}                           # camera orbit, degrees
 AGENT=${AGENT:-equibot}                                    # equibot | dp
 STAGES=${STAGES:-"download data train eval collect"}
-NUM_DEMOS=${NUM_DEMOS:-100}          # demos per task (paper recipe: 100)
-EPOCHS=${EPOCHS:-2000}               # paper recipe: 2000 epochs (their robomimic setup)
+NUM_DEMOS=${NUM_DEMOS:-}             # empty = per-task default from tasks.py
+                                     # (can/square 200, MimicGen tasks 800);
+                                     # set to force one count for all tasks
+EPOCHS=${EPOCHS:-}                   # empty = computed per task from the dataset
+                                     # size so training runs ~STEPS_TARGET
+                                     # optimizer steps; set to force a count
+STEPS_TARGET=${STEPS_TARGET:-1500000}  # ~2x the paper's robomimic budget
+                                     # (2000 epochs on 100 demos ~ 750k steps);
+                                     # at can's 200 demos this reproduces
+                                     # ~2000 epochs
+BATCH_SIZE=32                        # must match training.batch_size (base.yaml)
 N_EPISODES=${N_EPISODES:-20}         # eval episodes per (task, angle)
 SEED=${SEED:-0}
 RESOLUTION=${RESOLUTION:-256}        # render size for depth/segmentation
@@ -44,6 +53,7 @@ export MUJOCO_GL=${MUJOCO_GL:-egl}   # egl (GPU) | osmesa (CPU, slow but always 
 
 if [ "$SMOKE" = 1 ]; then
     NUM_DEMOS=3; EPOCHS=2; N_EPISODES=2; MAX_STEPS=40
+    export NUM_DEMOS EPOCHS
     [ "${ANGLES}" = "0 5 15 30 45" ] && ANGLES="0 30"
     # Own roots: a smoke run must never leave 3-demo datasets / 2-epoch
     # checkpoints / 2-episode eval results where the real run would pick
@@ -58,7 +68,7 @@ fi
 
 echo "════ EquiBot viewpoint experiment ════"
 echo "AGENT=$AGENT TASKS='$TASKS' ANGLES='$ANGLES' STAGES='$STAGES'"
-echo "NUM_DEMOS=$NUM_DEMOS EPOCHS=$EPOCHS N_EPISODES=$N_EPISODES SEED=$SEED"
+echo "NUM_DEMOS=${NUM_DEMOS:-per-task} EPOCHS=${EPOCHS:-auto (~$STEPS_TARGET steps)} N_EPISODES=$N_EPISODES SEED=$SEED"
 echo "CAM_SHIFT_MODE=$CAM_SHIFT_MODE (elev ratio $CAM_ELEV_RATIO, cap $CAM_ELEV_CAP_DEG) INIT_STATES=$INIT_STATES"
 echo "DATA_ROOT=$DATA_ROOT LOG_ROOT=$LOG_ROOT MUJOCO_GL=$MUJOCO_GL"
 mkdir -p "$DATA_ROOT/demos" "$LOG_ROOT"
@@ -67,7 +77,17 @@ has_stage() { [[ " $STAGES " == *" $1 "* ]]; }
 hdf5_of()   { echo "$DATA_ROOT/demos/$1.hdf5"; }
 pcs_of()    { echo "$DATA_ROOT/equibot/$1/pcs"; }
 train_prefix() { echo "train_${1}_${AGENT}"; }
-ckpt_of()   { printf "%s/train/%s/ckpt%05d.pth" "$LOG_ROOT" "$(train_prefix "$1")" $((EPOCHS - 1)); }
+demos_of()  { if [ -n "$NUM_DEMOS" ]; then echo "$NUM_DEMOS"; else python -m equibot.envs.robosuite_sim.tasks train_demos "$1"; fi }
+# Epochs from the dataset actually on disk, so the optimizer-step budget is
+# held constant across tasks with very different demo counts/lengths.
+epochs_of() {
+    if [ -n "$EPOCHS" ]; then echo "$EPOCHS"; return; fi
+    local n
+    n=$(find "$(pcs_of "$1")" -name '*.npz' 2>/dev/null | wc -l | tr -d ' ')
+    [ "$n" -gt 0 ] || { echo "ERROR: no dataset at $(pcs_of "$1") — run the data stage first (epochs are computed from it)" >&2; return 1; }
+    python -c "import math,sys; n,b,t=map(int,sys.argv[1:]); print(max(1, math.ceil(t/max(1, n//b))))" "$n" "$BATCH_SIZE" "$STEPS_TARGET"
+}
+ckpt_of()   { local ep; ep=$(epochs_of "$1") || return 1; printf "%s/train/%s/ckpt%05d.pth" "$LOG_ROOT" "$(train_prefix "$1")" $((ep - 1)); }
 
 # ─── Preflight: imports ───────────────────────────────────────────────────
 python - "$TASKS" <<'PY'
@@ -108,7 +128,7 @@ fi
 # a leftover from a smaller run (e.g. an old smoke run) must be rebuilt.
 data_ok() {  # $1 = task
     python -c "import json,sys; m=json.load(open(sys.argv[1])); sys.exit(0 if m['num_demos']==int(sys.argv[2]) else 1)" \
-        "$DATA_ROOT/equibot/$1/meta.json" "$NUM_DEMOS" 2>/dev/null
+        "$DATA_ROOT/equibot/$1/meta.json" "$(demos_of "$1")" 2>/dev/null
 }
 # A checkpoint counts as done only if the dataset it trained on still matches:
 # same NUM_DEMOS and the data's meta.json is OLDER than the checkpoint.
@@ -128,14 +148,14 @@ eval_ok() {  # $1 = eval_results.json  $2 = ckpt
 if has_stage data; then
     for task in $TASKS; do
         out="$DATA_ROOT/equibot/$task"
-        if data_ok "$task" && [ "$FORCE" != 1 ]; then echo "[data] $out exists (num_demos=$NUM_DEMOS)"; continue; fi
+        if data_ok "$task" && [ "$FORCE" != 1 ]; then echo "[data] $out exists (num_demos=$(demos_of "$task"))"; continue; fi
         if [ -d "$out" ]; then
             echo "[data] $out is stale (different num_demos) — rebuilding"
             rm -rf "$out"
         fi
         python -m equibot.envs.robosuite_sim.generate_demos \
             --dataset "$(hdf5_of "$task")" --task "$task" --out_dir "$out" \
-            --num_demos "$NUM_DEMOS" --resolution "$RESOLUTION" --seed "$SEED"
+            --num_demos "$(demos_of "$task")" --resolution "$RESOLUTION" --seed "$SEED"
     done
 fi
 
@@ -146,10 +166,12 @@ if has_stage train; then
         if train_ok "$task" && [ "$FORCE" != 1 ]; then echo "[train] $ckpt exists and matches the dataset"; continue; fi
         prefix=$(train_prefix "$task")
         np=$(python -m equibot.envs.robosuite_sim.tasks num_points "$task")
+        ep=$(epochs_of "$task") || exit 1
+        echo "[train] $task: $(demos_of "$task") demos, $ep epochs (~$STEPS_TARGET steps), $np points"
         python -m equibot.policies.train --config-name "robosuite_${AGENT}" \
             mode=train prefix="$prefix" hydra.run.dir="$LOG_ROOT/train/$prefix" \
             use_wandb="$USE_WANDB" seed="$SEED" \
-            training.num_epochs="$EPOCHS" data.dataset.num_points="$np" \
+            training.num_epochs="$ep" data.dataset.num_points="$np" \
             data.dataset.path="$(pcs_of "$task")" \
             env.args.dataset_path="$(hdf5_of "$task")" env.args.task_name="$task" \
             env.args.resolution="$RESOLUTION"

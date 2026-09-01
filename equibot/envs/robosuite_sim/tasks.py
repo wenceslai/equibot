@@ -19,6 +19,7 @@ TASK_SPECS = {
         "url": "http://downloads.cs.stanford.edu/downloads/rt_benchmark/can/ph/demo_v141.hdf5",
         "n_demos_available": 200,
         "num_points": 256,   # paper App. E: Can uses 256-point clouds
+        "train_demos": 200,  # all ph demos
     },
     "square": {
         "env_name": "NutAssemblySquare",
@@ -26,6 +27,7 @@ TASK_SPECS = {
         "url": "http://downloads.cs.stanford.edu/downloads/rt_benchmark/square/ph/demo_v141.hdf5",
         "n_demos_available": 200,
         "num_points": 512,   # paper App. E: Square uses 512-point clouds
+        "train_demos": 200,  # all ph demos
     },
     "square_d1": {
         "env_name": "Square_D1",
@@ -33,6 +35,7 @@ TASK_SPECS = {
         "url": "https://huggingface.co/datasets/amandlek/mimicgen_datasets/resolve/main/core/square_d1.hdf5",
         "n_demos_available": 1000,
         "num_points": 512,   # = Square (paper App. E)
+        "train_demos": 800,
     },
     "stack_d1": {
         "env_name": "Stack_D1",
@@ -40,6 +43,7 @@ TASK_SPECS = {
         "url": "https://huggingface.co/datasets/amandlek/mimicgen_datasets/resolve/main/core/stack_d1.hdf5",
         "n_demos_available": 1000,
         "num_points": 1024,  # not in the paper; their default for all other tasks
+        "train_demos": 800,
     },
     "stack_three_d1": {
         "env_name": "StackThree_D1",
@@ -47,6 +51,7 @@ TASK_SPECS = {
         "url": "https://huggingface.co/datasets/amandlek/mimicgen_datasets/resolve/main/core/stack_three_d1.hdf5",
         "n_demos_available": 1000,
         "num_points": 1024,  # not in the paper; their default for all other tasks
+        "train_demos": 800,
     },
 }
 
