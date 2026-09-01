@@ -42,7 +42,7 @@ TASK_SPECS = {
         "gt_bodies": ["cubeA_main", "cubeB_main"],
         "url": "https://huggingface.co/datasets/amandlek/mimicgen_datasets/resolve/main/core/stack_d1.hdf5",
         "n_demos_available": 1000,
-        "num_points": 1024,  # not in the paper; their default for all other tasks
+        "num_points": 512,  # not in the paper; their default for all other tasks
         "train_demos": 800,
     },
     "stack_three_d1": {
@@ -50,7 +50,7 @@ TASK_SPECS = {
         "gt_bodies": ["cubeA_main", "cubeB_main", "cubeC_main"],
         "url": "https://huggingface.co/datasets/amandlek/mimicgen_datasets/resolve/main/core/stack_three_d1.hdf5",
         "n_demos_available": 1000,
-        "num_points": 1024,  # not in the paper; their default for all other tasks
+        "num_points": 512,  # not in the paper; their default for all other tasks
         "train_demos": 800,
     },
 }
