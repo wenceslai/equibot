@@ -145,10 +145,11 @@ if has_stage train; then
         ckpt=$(ckpt_of "$task")
         if train_ok "$task" && [ "$FORCE" != 1 ]; then echo "[train] $ckpt exists and matches the dataset"; continue; fi
         prefix=$(train_prefix "$task")
+        np=$(python -m equibot.envs.robosuite_sim.tasks num_points "$task")
         python -m equibot.policies.train --config-name "robosuite_${AGENT}" \
             mode=train prefix="$prefix" hydra.run.dir="$LOG_ROOT/train/$prefix" \
             use_wandb="$USE_WANDB" seed="$SEED" \
-            training.num_epochs="$EPOCHS" \
+            training.num_epochs="$EPOCHS" data.dataset.num_points="$np" \
             data.dataset.path="$(pcs_of "$task")" \
             env.args.dataset_path="$(hdf5_of "$task")" env.args.task_name="$task" \
             env.args.resolution="$RESOLUTION"
@@ -161,6 +162,7 @@ if has_stage eval; then
     for task in $TASKS; do
         ckpt=$(ckpt_of "$task")
         [ -f "$ckpt" ] || { echo "[eval] missing checkpoint $ckpt (run the train stage)" >&2; exit 1; }
+        np=$(python -m equibot.envs.robosuite_sim.tasks num_points "$task")
         for deg in $ANGLES; do
             prefix="eval_${task}_${AGENT}_cam${deg}"
             dir="$LOG_ROOT/eval/$prefix"
@@ -169,6 +171,7 @@ if has_stage eval; then
                 mode=eval prefix="$prefix" hydra.run.dir="$dir" \
                 use_wandb="$USE_WANDB" seed="$SEED" \
                 training.ckpt="$ckpt" training.num_eval_episodes="$N_EPISODES" \
+                data.dataset.num_points="$np" \
                 data.dataset.path="$(pcs_of "$task")" \
                 env.args.dataset_path="$(hdf5_of "$task")" env.args.task_name="$task" \
                 env.args.resolution="$RESOLUTION" env.args.max_episode_length="$MAX_STEPS" \

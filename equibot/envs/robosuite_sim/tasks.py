@@ -18,30 +18,35 @@ TASK_SPECS = {
         "gt_bodies": ["Can_main", "bin2"],
         "url": "http://downloads.cs.stanford.edu/downloads/rt_benchmark/can/ph/demo_v141.hdf5",
         "n_demos_available": 200,
+        "num_points": 256,   # paper App. E: Can uses 256-point clouds
     },
     "square": {
         "env_name": "NutAssemblySquare",
         "gt_bodies": ["SquareNut_main", "peg1"],
         "url": "http://downloads.cs.stanford.edu/downloads/rt_benchmark/square/ph/demo_v141.hdf5",
         "n_demos_available": 200,
+        "num_points": 512,   # paper App. E: Square uses 512-point clouds
     },
     "square_d1": {
         "env_name": "Square_D1",
         "gt_bodies": ["SquareNut_main", "peg1"],
         "url": "https://huggingface.co/datasets/amandlek/mimicgen_datasets/resolve/main/core/square_d1.hdf5",
         "n_demos_available": 1000,
+        "num_points": 512,   # = Square (paper App. E)
     },
     "stack_d1": {
         "env_name": "Stack_D1",
         "gt_bodies": ["cubeA_main", "cubeB_main"],
         "url": "https://huggingface.co/datasets/amandlek/mimicgen_datasets/resolve/main/core/stack_d1.hdf5",
         "n_demos_available": 1000,
+        "num_points": 1024,  # not in the paper; their default for all other tasks
     },
     "stack_three_d1": {
         "env_name": "StackThree_D1",
         "gt_bodies": ["cubeA_main", "cubeB_main", "cubeC_main"],
         "url": "https://huggingface.co/datasets/amandlek/mimicgen_datasets/resolve/main/core/stack_three_d1.hdf5",
         "n_demos_available": 1000,
+        "num_points": 1024,  # not in the paper; their default for all other tasks
     },
 }
 

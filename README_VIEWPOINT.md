@@ -94,8 +94,10 @@ Square, App. E/G):
   configs ship 32. We follow the paper.
 * `NUM_DEMOS=100 EPOCHS=2000` — exactly the paper's largest robomimic
   setup (they train 2000 epochs on 25/50/100 demos), ≈750k gradient steps.
-* 1024 points vs the paper's 256 (Can) / 512 (Square): the paper reduces
-  points only to speed up training, "without hurting performance".
+* Point-cloud sizes per task follow the paper: 256 (can), 512 (square /
+  square_d1); the stacks are not in the paper and use their 1024 default.
+  `env.args.num_points` interpolates from `data.dataset.num_points`, so train
+  and eval always agree.
 * Point-cloud construction for robomimic is unspecified in the paper and
   absent from the released code; we use the segmented-objects cloud described
   under "What is being measured".
